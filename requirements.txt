@@ -1,1 +1,6 @@
 streamlit
+requests
+beautifulsoup4
+newspaper3k
+PyMuPDF
+lxml[html_clean]
