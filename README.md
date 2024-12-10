@@ -23,7 +23,7 @@ This is a Streamlit application that allows users to summarize articles, newspap
 
 You can install the required libraries using `pip`:
 
-```bash
+bash
 pip install streamlit newspaper3k requests nltk PyMuPDF
 
 ### How to run it on your own machine
