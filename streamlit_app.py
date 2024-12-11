@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import requests
 from bs4 import BeautifulSoup
 from newspaper import Article
@@ -8,10 +8,9 @@ import fitz  # PyMuPDF
 import json
 import os
 import nltk
-import bcrypt
-
-# Download necessary NLTK packages
 nltk.download('punkt')
+nltk.download('punkt_tab')
+
 
 # Custom CSS for styling
 st.markdown("""
@@ -86,16 +85,6 @@ def save_user_data(data):
     with open(USER_DATA_FILE, 'w') as file:
         json.dump(data, file)
 
-# Hash password
-def hash_password(password):
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed
-
-# Check password
-def check_password(stored_password, entered_password):
-    return bcrypt.checkpw(entered_password.encode('utf-8'), stored_password)
-
 # Streamlit app logic for signup and login
 def signup_page():
     st.title('Signup')
@@ -111,9 +100,8 @@ def signup_page():
         elif password != confirm_password:
             st.error('Passwords do not match.')
         else:
-            # Hash the password before storing
-            hashed_password = hash_password(password)
-            user_data[username] = hashed_password
+            # Add the new user to the data
+            user_data[username] = password
             save_user_data(user_data)
             st.success('Signup successful! You can now log in.')
 
@@ -124,7 +112,7 @@ def login_page():
 
     if st.button('Login'):
         user_data = load_user_data()
-        if username in user_data and check_password(user_data[username], password):
+        if username in user_data and user_data[username] == password:
             st.session_state['logged_in'] = True
             st.session_state['show_login'] = False
             st.session_state['username'] = username
@@ -137,11 +125,11 @@ def main_page():
     st.write('You have successfully logged in.')
 
     st.title('Summarization Tool for Articles, Newspapers, and Research Papers')
-
+    
     # User inputs
     url_or_text = st.text_input("Enter the URL of the article, newspaper, research papers and Text:")
     source_type = st.selectbox("Select the type of content", ["Article", "Newspaper", "Research Paper", "Text"])
-
+    
     if st.button('Process'):
         if url_or_text:
             if source_type == "Article":
@@ -163,7 +151,7 @@ def process_article(url):
         article.download()
         article.parse()
         article.nlp()
-
+        
         st.subheader("Article Details")
         st.write("Title:", article.title)
         st.write("Authors:", article.authors)
@@ -186,26 +174,26 @@ def process_research_paper(url):
     try:
         response = requests.get(url)
         response.raise_for_status()  # Check for HTTP errors
-
+        
         # Open the PDF
         pdf_file = fitz.open(stream=response.content, filetype="pdf")
         text = ""
-
+        
         # Extract text from each page
         for page_num in range(len(pdf_file)):
             page = pdf_file.load_page(page_num)
             text += page.get_text()
-
+        
         if text.strip() == "":
             st.warning("No text found in the research paper.")
         else:
             st.subheader("Extracted Research Paper Text")
             st.text_area("Full Text:", text, height=300)
-
+            
             # Detect language
             lang = detect(text)
             st.write("Detected Language:", lang)
-
+            
             # Summarize using transformers
             summarizer = pipeline("summarization", model="facebook/mbart-large-cc25")
             summary = summarizer(text[:1024], max_length=150, min_length=50, do_sample=False)  # Limit input to model
@@ -218,6 +206,7 @@ def process_research_paper(url):
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
+
 def process_text(text):
     try:
         sentences = text.split(".")  # Split into sentences
@@ -229,7 +218,7 @@ def process_text(text):
 
         st.subheader("Summarized Text:")
         st.write("Text Summary:", summary)
-
+    
     except Exception as e:  # Catch any unexpected errors
         st.error(f"An error occurred while summarizing the text: {e}")
 
