@@ -150,6 +150,9 @@ def process_article(url):
         article = Article(url)
         article.download()
         article.parse()
+        if not article.text.strip():
+            st.warning("The article appears to be primarily visual (e.g., images or videos) and does not contain extractable text. Summarization is not possible.")
+            return
         article.nlp()
         
         st.subheader("Article Details")
