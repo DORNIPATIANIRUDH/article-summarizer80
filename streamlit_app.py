@@ -8,7 +8,10 @@ import fitz  # PyMuPDF
 import json
 import os
 import nltk
+import bcrypt
+
 nltk.download('punkt')
+
 
 # Custom CSS for styling
 st.markdown("""
@@ -83,6 +86,13 @@ def save_user_data(data):
     with open(USER_DATA_FILE, 'w') as file:
         json.dump(data, file)
 
+# Hash and verify password using bcrypt
+def hash_password(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+def check_password(stored_password, entered_password):
+    return bcrypt.checkpw(entered_password.encode('utf-8'), stored_password)
+
 # Streamlit app logic for signup and login
 def signup_page():
     st.title('Signup')
@@ -91,13 +101,15 @@ def signup_page():
     confirm_password = st.text_input('Confirm Password', type='password')
 
     if st.button('Sign Up'):
+        # Check if the username already exists
         user_data = load_user_data()
         if username in user_data:
             st.error('Username already exists. Please choose another one.')
         elif password != confirm_password:
             st.error('Passwords do not match.')
         else:
-            user_data[username] = password
+            # Add the new user to the data
+            user_data[username] = hash_password(password)
             save_user_data(user_data)
             st.success('Signup successful! You can now log in.')
 
@@ -108,95 +120,119 @@ def login_page():
 
     if st.button('Login'):
         user_data = load_user_data()
-        if username in user_data and user_data[username] == password:
+        if username in user_data and check_password(user_data[username], password):
             st.session_state['logged_in'] = True
+            st.session_state['show_login'] = False
             st.session_state['username'] = username
             st.success('Login successful!')
         else:
             st.error('Incorrect username or password')
 
 def main_page():
-    st.title(f'Welcome, {st.session_state["username"]}')
-    st.title('Summarization Tool for Articles, Newspapers, Research Papers, and Text')
+    st.title('Welcome, ' + st.session_state['username'])
+    st.write('You have successfully logged in.')
 
+    st.title('Summarization Tool for Articles, Newspapers, and Research Papers')
+    
     # User inputs
-    url_or_text = st.text_input("Enter the URL or Text:")
-    source_type = st.selectbox("Select Content Type", ["Article", "Newspaper", "Research Paper", "Text"])
+    url_or_text = st.text_input("Enter the URL of the article, newspaper, research papers and Text:")
+    source_type = st.selectbox("Select the type of content", ["Article", "Newspaper", "Research Paper", "Text"])
     
     if st.button('Process'):
         if url_or_text:
             if source_type == "Article":
                 process_article(url_or_text)
             elif source_type == "Newspaper":
-                process_article(url_or_text)
+                process_newspaper(url_or_text)
             elif source_type == "Research Paper" and url_or_text.lower().endswith(".pdf"):
                 process_research_paper(url_or_text)
             elif source_type == "Text":
                 process_text(url_or_text)
             else:
-                st.warning("Invalid input. Please provide a valid URL or text.")
+                st.warning("Please provide a valid URL and select the appropriate type of content.")
         else:
-            st.warning("Please provide a valid URL or text.")
+            st.warning("Please enter a URL or Text.")
 
-def summarize_multilingual(text):
-    try:
-        lang = detect(text)
-        st.write(f"Detected Language: {lang}")
-        summarizer = pipeline("summarization", model="facebook/mbart-large-cc25")
-        summary = summarizer(text[:1024], max_length=150, min_length=50, do_sample=False)
-        return summary[0]['summary_text']
-    except Exception as e:
-        return f"Error in summarization: {e}"
+@st.cache_data
+def summarize_text(text):
+    summarizer = pipeline("summarization", model="facebook/mbart-large-cc25")
+    return summarizer(text[:1024], max_length=150, min_length=50, do_sample=False)
 
 def process_article(url):
     try:
         article = Article(url)
         article.download()
         article.parse()
-        if not article.text.strip():
-            st.warning("The article appears to be primarily visual (e.g., images or videos) and does not contain extractable text. Summarization is not possible.")
-            return
-
         article.nlp()
-
+        
         st.subheader("Article Details")
         st.write("Title:", article.title)
         st.write("Authors:", article.authors)
         st.write("Publish Date:", article.publish_date)
         if article.top_image:
-            st.image(article.top_image, caption="Top Image")
+            st.image(article.top_image, caption="Top Image", use_container_width=True)
 
         st.write("Article Text:", article.text)
-        summary = summarize_multilingual(article.text)
-        st.subheader("Article Summary")
-        st.write(summary)
+        st.write("Article Summary:", article.summary)
     except Exception as e:
-        st.error(f"Error while processing the article: {e}")
+        st.error(f"An error occurred while processing the article: {e}")
+
+def process_newspaper(url):
+    try:
+        process_article(url)  # Newspapers are processed similarly to articles
+    except Exception as e:
+        st.error(f"An error occurred while processing the newspaper: {e}")
 
 def process_research_paper(url):
     try:
         response = requests.get(url)
-        response.raise_for_status()
+        response.raise_for_status()  # Check for HTTP errors
+        
+        # Open the PDF
         pdf_file = fitz.open(stream=response.content, filetype="pdf")
         text = ""
-        for page in pdf_file:
+        
+        # Extract text from each page
+        for page_num in range(len(pdf_file)):
+            page = pdf_file.load_page(page_num)
             text += page.get_text()
-        if not text.strip():
-            st.warning("The research paper appears to be primarily visual (e.g., images or diagrams) and does not contain extractable text. Summarization is not possible.")
-            return
-        summary = summarize_multilingual(text)
-        st.subheader("Summarized Research Paper")
-        st.write(summary)
+        
+        if text.strip() == "":
+            st.warning("No text found in the research paper.")
+        else:
+            st.subheader("Extracted Research Paper Text")
+            st.text_area("Full Text:", text, height=300)
+            
+            # Detect language
+            lang = detect(text)
+            st.write("Detected Language:", lang)
+            
+            # Summarize using transformers
+            summary = summarize_text(text)
+            st.subheader("Summarized Research Paper")
+            st.write(summary[0]['summary_text'])
+    except requests.exceptions.RequestException as e:
+        st.error(f"An error occurred while fetching the PDF: {e}")
+    except fitz.FitzError as e:
+        st.error(f"An error occurred while processing the PDF: {e}")
     except Exception as e:
-        st.error(f"Error while processing the research paper: {e}")
+        st.error(f"An unexpected error occurred: {e}")
+
 
 def process_text(text):
     try:
-        summary = summarize_multilingual(text)
-        st.subheader("Text Summary")
-        st.write(summary)
-    except Exception as e:
-        st.error(f"Error while processing the text: {e}")
+        sentences = text.split(".")  # Split into sentences
+
+        # You can implement your own ranking logic here based on length, keywords, etc.
+        # For this example, we'll just take the first few sentences
+        num_sentences_to_include = 3
+        summary = ". ".join(sentences[:num_sentences_to_include]) + "."
+
+        st.subheader("Summarized Text:")
+        st.write("Text Summary:", summary)
+    
+    except Exception as e:  # Catch any unexpected errors
+        st.error(f"An error occurred while summarizing the text: {e}")
 
 # Main logic for session control
 if 'logged_in' not in st.session_state:
@@ -206,8 +242,8 @@ if st.session_state['logged_in']:
     main_page()
 else:
     st.sidebar.title("Login/Signup")
-    option = st.sidebar.radio("Choose an option", ["Login", "Signup"])
-    if option == "Login":
+    login_or_signup = st.sidebar.radio("Choose an option", ["Login", "Signup"])
+    if login_or_signup == "Login":
         login_page()
     else:
         signup_page()
