@@ -9,3 +9,5 @@ nltk
 torch
 tensorflow
 tf-keras
+lxml[html_clean]
+
