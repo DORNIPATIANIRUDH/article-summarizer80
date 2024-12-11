@@ -4,3 +4,7 @@ beautifulsoup4
 newspaper3k
 PyMuPDF
 lxml[html_clean]
+langdetect
+transformers
+pymupdf
+nltk
