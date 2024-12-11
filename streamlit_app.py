@@ -142,39 +142,11 @@ def summarize_multilingual(text):
     try:
         lang = detect(text)
         st.write(f"Detected Language: {lang}")
-        
-        # Check if TensorFlow or PyTorch is installed
-        try:
-            import tensorflow as tf  # Check for TensorFlow
-        except ImportError:
-            tensorflow_installed = False
-        else:
-            tensorflow_installed = True
-        
-        try:
-            import torch  # Check for PyTorch
-        except ImportError:
-            pytorch_installed = False
-        else:
-            pytorch_installed = True
-        
-        if not (tensorflow_installed or pytorch_installed):
-            raise EnvironmentError(
-                "At least one of TensorFlow 2.0 or PyTorch should be installed. "
-                "To install TensorFlow, visit https://www.tensorflow.org/install/. "
-                "To install PyTorch, visit https://pytorch.org/."
-            )
-        
-        # Initialize summarizer
         summarizer = pipeline("summarization", model="facebook/mbart-large-cc25")
         summary = summarizer(text[:1024], max_length=150, min_length=50, do_sample=False)
         return summary[0]['summary_text']
-    
-    except EnvironmentError as env_err:
-        return f"Error in summarization: {env_err}"
     except Exception as e:
         return f"Error in summarization: {e}"
-
 
 def process_article(url):
     try:
